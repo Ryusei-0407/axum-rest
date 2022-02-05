@@ -6,7 +6,7 @@ use axum::{
     AddExtensionLayer, Router,
 };
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 
 async fn index() -> &'static str {
     "Hello, world!"
@@ -17,6 +17,33 @@ async fn using_connection_pool_extractor(
 ) -> Result<String, (StatusCode, String)> {
     sqlx::query_scalar("select 'Hello World from pg'")
         .fetch_one(&pool)
+        .await
+        .map_err(internal_error)
+}
+
+struct DatabaseConnection(sqlx::pool::PoolConnection<sqlx::Postgres>);
+
+#[async_trait]
+impl<B: Send> FromRequest<B> for DatabaseConnection {
+    type Rejection = (StatusCode, String);
+
+    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+        let Extension(pool) = Extension::<PgPool>::from_request(req)
+            .await
+            .map_err(internal_error)?;
+
+        let conn = pool.acquire().await.map_err(internal_error)?;
+
+        Ok(Self(conn))
+    }
+}
+
+async fn using_connection_extractor(
+    DatabaseConnection(conn): DatabaseConnection,
+) -> Result<String, (StatusCode, String)> {
+    let mut conn = conn;
+    sqlx::query_scalar("select 'Hello World from pg'")
+        .fetch_one(&mut conn)
         .await
         .map_err(internal_error)
 }
@@ -45,11 +72,14 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(index))
-        .route("/api/v1", get(using_connection_pool_extractor))
+        .route(
+            "/api/v1",
+            get(using_connection_pool_extractor).post(using_connection_extractor),
+        )
         .layer(AddExtensionLayer::new(pool));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    tracing::debug!("listening on http://{addr}");
+    println!("listening on http://{addr}");
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())

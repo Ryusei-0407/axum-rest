@@ -70,6 +70,43 @@ async fn get_users(
     Ok(Json(users))
 }
 
+async fn get_user_by_id(
+    Path(id): Path<i32>,
+    DatabaseConnection(conn): DatabaseConnection,
+) -> Result<Json<User>, (StatusCode, String)> {
+    let mut conn = conn;
+    let sql = "SELECT * FROM user_table WHERE id = $1".to_string();
+    let user = sqlx::query_as(&sql)
+        .bind(id)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+
+    Ok(Json(user))
+}
+
+#[derive(Debug, Deserialize)]
+struct InputUser {
+    name: String,
+    age: i32,
+}
+
+async fn create_user(
+    DatabaseConnection(conn): DatabaseConnection,
+    Json(payload): Json<InputUser>,
+) -> Result<String, (StatusCode, String)> {
+    let mut conn = conn;
+    let sql = "INSERT INTO user_table (name, age, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id, name, age, created_at, updated_at".to_string();
+    sqlx::query(&sql)
+        .bind(payload.name)
+        .bind(payload.age)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+
+    Ok("Sucess".to_string())
+}
+
 #[derive(Debug, Deserialize)]
 struct Name {
     name: String,
@@ -114,28 +151,6 @@ async fn update_age(
     Ok(Json(res))
 }
 
-#[derive(Debug, Deserialize)]
-struct InputUser {
-    name: String,
-    age: i32,
-}
-
-async fn create_user(
-    DatabaseConnection(conn): DatabaseConnection,
-    Json(payload): Json<InputUser>,
-) -> Result<String, (StatusCode, String)> {
-    let mut conn = conn;
-    let sql = "INSERT INTO user_table (name, age, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id, name, age, created_at, updated_at".to_string();
-    sqlx::query(&sql)
-        .bind(payload.name)
-        .bind(payload.age)
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-
-    Ok("Sucess".to_string())
-}
-
 #[tokio::main]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
@@ -157,6 +172,7 @@ async fn main() {
 
     let api_routes = Router::new()
         .route("/users", get(get_users))
+        .route("/users/:id", get(get_user_by_id))
         .route("/create", post(create_user))
         .nest("/update", update_routes);
 

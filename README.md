@@ -11,26 +11,25 @@
 **Build Postgres container & Create Database schema**
 
 ```sh
-# if unused sqlx-cli
-# cargo install sqlx-cli
+git clone git@github.com:Ryusei-0407/axum-rest.git
 
-make setup
+cd axum-rest
+
+docker-compose up -d
+
+sqlx db create
+
+sqlx migrate run
+
+make
 ```
 
 **Clean Up**
 
 ```sh
-make clean
-```
+sqlx db drop
 
-**Create Table Schema**
+cargo clean
 
-```sh
-sqlx migrate run
-```
-
-**Revert Database table**
-
-```sh
-sqlx migrate revert
+docker-compose down
 ```

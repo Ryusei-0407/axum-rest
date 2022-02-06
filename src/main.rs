@@ -91,7 +91,7 @@ async fn create_user(DatabaseConnection(conn): DatabaseConnection, Json(user): J
 #[tokio::main]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "example_tokio_postgres=debug")
+        std::env::set_var("RUST_LOG", "demo-axum=debug")
     }
     tracing_subscriber::fmt::init();
 

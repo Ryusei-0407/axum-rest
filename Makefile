@@ -9,12 +9,9 @@ fmt:
 
 setup:
 	docker-compose up -d --build &&\
-	sqlx db create &&\
-	sqlx migrate run &&\
-	cargo run
+	sqlx db create && sqlx migrate run &&\
+	docker build . -t axum-api && docker run --rm -p 3000:3000 -d axum-api
 
 clean:
-	cargo clean &&\
-	sqlx migrate revert &&\
 	sqlx db drop &&\
-	docker-compose down &&\
+	docker-compose down

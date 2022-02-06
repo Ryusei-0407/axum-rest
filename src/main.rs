@@ -1,6 +1,6 @@
 use anyhow::Result;
 use axum::{
-    extract::{Extension, FromRequest, RequestParts},
+    extract::{Extension, FromRequest, Path, RequestParts},
     http::StatusCode,
     routing::{get, post},
     AddExtensionLayer, Json, Router,
@@ -13,7 +13,7 @@ use sqlx::{FromRow, Row};
 use std::net::SocketAddr;
 
 async fn check_health() -> &'static str {
-    "Hello, world!"
+    "OK!"
 }
 
 struct DatabaseConnection(sqlx::pool::PoolConnection<sqlx::Postgres>);
@@ -71,21 +71,69 @@ async fn get_users(
 }
 
 #[derive(Debug, Deserialize)]
+struct Name {
+    name: String,
+}
+
+async fn update_name(
+    Path(id): Path<i32>,
+    DatabaseConnection(conn): DatabaseConnection,
+    Json(payload): Json<Name>,
+) -> Result<Json<User>, (StatusCode, String)> {
+    let mut conn = conn;
+    let sql = "UPDATE user_table SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, age, created_at, updated_at".to_string();
+    let res = sqlx::query_as(&sql)
+        .bind(payload.name)
+        .bind(id)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+
+    Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize)]
+struct Age {
+    age: i32,
+}
+
+async fn update_age(
+    Path(id): Path<i32>,
+    DatabaseConnection(conn): DatabaseConnection,
+    Json(payload): Json<Age>,
+) -> Result<Json<User>, (StatusCode, String)> {
+    let mut conn = conn;
+    let sql = "UPDATE user_table SET age = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, age, created_at, updated_at".to_string();
+    let res = sqlx::query_as(&sql)
+        .bind(payload.age)
+        .bind(id)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+
+    Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize)]
 struct InputUser {
     name: String,
     age: i32,
 }
 
-async fn create_user(DatabaseConnection(conn): DatabaseConnection, Json(user): Json<InputUser>) {
+async fn create_user(
+    DatabaseConnection(conn): DatabaseConnection,
+    Json(payload): Json<InputUser>,
+) -> Result<String, (StatusCode, String)> {
     let mut conn = conn;
-    let (name, age) = (user.name, user.age);
     let sql = "INSERT INTO user_table (name, age, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id, name, age, created_at, updated_at".to_string();
     sqlx::query(&sql)
-        .bind(name)
-        .bind(age)
+        .bind(payload.name)
+        .bind(payload.age)
         .fetch_one(&mut conn)
         .await
         .unwrap();
+
+    Ok("Sucess".to_string())
 }
 
 #[tokio::main]
@@ -103,10 +151,18 @@ async fn main() {
         .await
         .expect("can connect to database");
 
+    let update_routes = Router::new()
+        .route("/name/:id", post(update_name))
+        .route("/age/:id", post(update_age));
+
+    let api_routes = Router::new()
+        .route("/users", get(get_users))
+        .route("/create", post(create_user))
+        .nest("/update", update_routes);
+
     let app = Router::new()
         .route("/", get(check_health))
-        .route("/api/v1/users", get(get_users))
-        .route("/api/v1/create", post(create_user))
+        .nest("/api/v1", api_routes)
         .layer(AddExtensionLayer::new(pool));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));

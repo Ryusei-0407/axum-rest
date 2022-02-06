@@ -1,29 +1,24 @@
+use anyhow::Result;
 use axum::{
-    async_trait,
     extract::{Extension, FromRequest, RequestParts},
     http::StatusCode,
-    routing::get,
-    AddExtensionLayer, Router,
+    routing::{get, post},
+    AddExtensionLayer, Json, Router,
 };
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use chrono::NaiveDateTime;
+use dotenv::dotenv;
+use serde::{Deserialize, Serialize};
+use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
+use sqlx::{FromRow, Row};
 use std::net::SocketAddr;
 
-async fn index() -> &'static str {
+async fn check_health() -> &'static str {
     "Hello, world!"
-}
-
-async fn using_connection_pool_extractor(
-    Extension(pool): Extension<PgPool>,
-) -> Result<String, (StatusCode, String)> {
-    sqlx::query_scalar("select 'Hello World from pg'")
-        .fetch_one(&pool)
-        .await
-        .map_err(internal_error)
 }
 
 struct DatabaseConnection(sqlx::pool::PoolConnection<sqlx::Postgres>);
 
-#[async_trait]
+#[axum::async_trait]
 impl<B: Send> FromRequest<B> for DatabaseConnection {
     type Rejection = (StatusCode, String);
 
@@ -38,21 +33,59 @@ impl<B: Send> FromRequest<B> for DatabaseConnection {
     }
 }
 
-async fn using_connection_extractor(
-    DatabaseConnection(conn): DatabaseConnection,
-) -> Result<String, (StatusCode, String)> {
-    let mut conn = conn;
-    sqlx::query_scalar("select 'Hello World from pg'")
-        .fetch_one(&mut conn)
-        .await
-        .map_err(internal_error)
-}
-
 fn internal_error<E>(err: E) -> (StatusCode, String)
 where
     E: std::error::Error,
 {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct User {
+    id: i32,
+    name: String,
+    age: i32,
+    created_at: NaiveDateTime,
+    updated_at: NaiveDateTime,
+}
+
+async fn get_users(
+    DatabaseConnection(conn): DatabaseConnection,
+) -> Result<Json<Vec<User>>, (StatusCode, String)> {
+    let mut conn = conn;
+    let sql = "SELECT * FROM user_table".to_string();
+    let rows = sqlx::query(&sql);
+    let users: Vec<User> = rows
+        .map(|row: PgRow| User {
+            id: row.get("id"),
+            name: row.get("name"),
+            age: row.get("age"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+        .fetch_all(&mut conn)
+        .await
+        .unwrap();
+
+    Ok(Json(users))
+}
+
+#[derive(Debug, Deserialize)]
+struct InputUser {
+    name: String,
+    age: i32,
+}
+
+async fn create_user(DatabaseConnection(conn): DatabaseConnection, Json(user): Json<InputUser>) {
+    let mut conn = conn;
+    let (name, age) = (user.name, user.age);
+    let sql = "INSERT INTO user_table (name, age, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id, name, age, created_at, updated_at".to_string();
+    sqlx::query(&sql)
+        .bind(name)
+        .bind(age)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
 }
 
 #[tokio::main]
@@ -62,7 +95,7 @@ async fn main() {
     }
     tracing_subscriber::fmt::init();
 
-    dotenv::dotenv().ok();
+    dotenv().ok();
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is not set");
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -71,11 +104,9 @@ async fn main() {
         .expect("can connect to database");
 
     let app = Router::new()
-        .route("/", get(index))
-        .route(
-            "/api/v1",
-            get(using_connection_pool_extractor).post(using_connection_extractor),
-        )
+        .route("/", get(check_health))
+        .route("/api/v1/users", get(get_users))
+        .route("/api/v1/create", post(create_user))
         .layer(AddExtensionLayer::new(pool));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use axum::{
-    extract::{Extension, FromRequest, Path, RequestParts},
+    extract::{ConnectInfo, Extension, FromRequest, Path, RequestParts},
     http::StatusCode,
     routing::{delete, get, post},
     AddExtensionLayer, Json, Router,
@@ -14,6 +14,10 @@ use std::net::SocketAddr;
 
 async fn check_health() -> &'static str {
     "OK!"
+}
+
+async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> String {
+    format!("your IP address is: {}", addr)
 }
 
 struct DatabaseConnection(sqlx::pool::PoolConnection<sqlx::Postgres>);
@@ -190,14 +194,13 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(check_health))
+        .route("/addr", get(handler))
         .nest("/api/v1", api_routes)
-        .layer(AddExtensionLayer::new(pool));
+        .layer(AddExtensionLayer::new(pool))
+        .into_make_service_with_connect_info::<SocketAddr, _>();
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("listening on http://{addr}");
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    axum::Server::bind(&addr).serve(app).await.unwrap();
 }

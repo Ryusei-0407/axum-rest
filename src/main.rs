@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::{
     extract::{Extension, FromRequest, Path, RequestParts},
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, post},
     AddExtensionLayer, Json, Router,
 };
 use chrono::NaiveDateTime;
@@ -151,6 +151,17 @@ async fn update_age(
     Ok(Json(res))
 }
 
+async fn delete_user(
+    Path(id): Path<i32>,
+    DatabaseConnection(conn): DatabaseConnection,
+) -> Result<String, (StatusCode, String)> {
+    let mut conn = conn;
+    let sql = "DELETE FROM user_table WHERE id = $1".to_string();
+    sqlx::query(&sql).bind(id).execute(&mut conn).await.unwrap();
+
+    Ok("Sucess".to_string())
+}
+
 #[tokio::main]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
@@ -174,6 +185,7 @@ async fn main() {
         .route("/users", get(get_users))
         .route("/users/:id", get(get_user_by_id))
         .route("/create", post(create_user))
+        .route("/delete/:id", delete(delete_user))
         .nest("/update", update_routes);
 
     let app = Router::new()

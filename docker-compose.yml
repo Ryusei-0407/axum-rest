@@ -1,21 +1,36 @@
 version: '3.9'
 
 services:
-  db:
-    image: postgres:9.6.24-alpine
-    ports:
-      - 5432:5432
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_INITDB_ARGS: '--encoding=UTF-8'
-      TZ: 'Asia/Tokyo'
-    hostname: localhost
-    restart: always
-    user: postgres
+  roach-0:
+    container_name: roach-0
+    hostname: roach-0
+    image: cockroachdb/cockroach:latest
+    command: start-single-node --cluster-name=roach-cluster --logtostderr=WARNING --log-file-verbosity=WARNING --insecure
 
-volumes:
-  db_data:
-    external: false
+  roach-1:
+    container_name: roach-1
+    hostname: roach-1
+    image: cockroachdb/cockroach:latest
+    command: start --cluster-name=roach-cluster --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=roach-0
+    depends_on:
+      - roach-0
+
+  roach-2:
+    container_name: roach-2
+    hostname: roach-2
+    image: cockroachdb/cockroach:latest
+    command: start --cluster-name=roach-cluster --logtostderr=WARNING --log-file-verbosity=WARNING --insecure --join=roach-0
+    depends_on:
+      - roach-0
+
+  lb:
+    container_name: lb
+    hostname: lb
+    build: ./nginx
+    ports:
+      - 26257:26257
+      - 8080:8080
+    depends_on:
+      - roach-0
+      - roach-1
+      - roach-2

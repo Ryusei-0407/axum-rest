@@ -17,6 +17,8 @@ cd axum-rest
 
 docker-compose up -d
 
+# use sqlx -> cargo install sqlx-cli
+
 sqlx db create
 
 # use uuid_random_v4() -> execute postgres/uuid.sql

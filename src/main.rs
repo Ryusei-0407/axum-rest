@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::{FromRow, Row};
 use std::net::SocketAddr;
+use uuid::Uuid;
 
 async fn check_health() -> &'static str {
     "OK!"
@@ -46,7 +47,7 @@ where
 
 #[derive(Debug, Serialize, FromRow)]
 struct User {
-    id: i32,
+    uuid: Uuid,
     name: String,
     age: i32,
     created_at: NaiveDateTime,
@@ -61,7 +62,7 @@ async fn get_users(
     let rows = sqlx::query(&sql);
     let users: Vec<User> = rows
         .map(|row: PgRow| User {
-            id: row.get("id"),
+            uuid: row.get("uuid"),
             name: row.get("name"),
             age: row.get("age"),
             created_at: row.get("created_at"),
@@ -74,14 +75,14 @@ async fn get_users(
     Ok(Json(users))
 }
 
-async fn get_user_by_id(
-    Path(id): Path<i32>,
+async fn get_user_by_uuid(
+    Path(uuid): Path<Uuid>,
     DatabaseConnection(conn): DatabaseConnection,
 ) -> Result<Json<User>, (StatusCode, String)> {
     let mut conn = conn;
-    let sql = "SELECT * FROM user_table WHERE id = $1".to_string();
+    let sql = "SELECT * FROM user_table WHERE uuid = $1".to_string();
     let user = sqlx::query_as(&sql)
-        .bind(id)
+        .bind(uuid)
         .fetch_one(&mut conn)
         .await
         .unwrap();
@@ -100,7 +101,7 @@ async fn create_user(
     Json(payload): Json<InputUser>,
 ) -> Result<String, (StatusCode, String)> {
     let mut conn = conn;
-    let sql = "INSERT INTO user_table (name, age, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id, name, age, created_at, updated_at".to_string();
+    let sql = "INSERT INTO user_table (name, age, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING uuid, name, age, created_at, updated_at".to_string();
     sqlx::query(&sql)
         .bind(payload.name)
         .bind(payload.age)
@@ -117,15 +118,15 @@ struct Name {
 }
 
 async fn update_name(
-    Path(id): Path<i32>,
+    Path(uuid): Path<Uuid>,
     DatabaseConnection(conn): DatabaseConnection,
     Json(payload): Json<Name>,
 ) -> Result<Json<User>, (StatusCode, String)> {
     let mut conn = conn;
-    let sql = "UPDATE user_table SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, age, created_at, updated_at".to_string();
+    let sql = "UPDATE user_table SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE uuid = $2 RETURNING uuid, name, age, created_at, updated_at".to_string();
     let res = sqlx::query_as(&sql)
         .bind(payload.name)
-        .bind(id)
+        .bind(uuid)
         .fetch_one(&mut conn)
         .await
         .unwrap();
@@ -139,15 +140,15 @@ struct Age {
 }
 
 async fn update_age(
-    Path(id): Path<i32>,
+    Path(uuid): Path<Uuid>,
     DatabaseConnection(conn): DatabaseConnection,
     Json(payload): Json<Age>,
 ) -> Result<Json<User>, (StatusCode, String)> {
     let mut conn = conn;
-    let sql = "UPDATE user_table SET age = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, age, created_at, updated_at".to_string();
+    let sql = "UPDATE user_table SET age = $1, updated_at = CURRENT_TIMESTAMP WHERE uuid = $2 RETURNING uuid, name, age, created_at, updated_at".to_string();
     let res = sqlx::query_as(&sql)
         .bind(payload.age)
-        .bind(id)
+        .bind(uuid)
         .fetch_one(&mut conn)
         .await
         .unwrap();
@@ -156,12 +157,16 @@ async fn update_age(
 }
 
 async fn delete_user(
-    Path(id): Path<i32>,
+    Path(uuid): Path<Uuid>,
     DatabaseConnection(conn): DatabaseConnection,
 ) -> Result<String, (StatusCode, String)> {
     let mut conn = conn;
-    let sql = "DELETE FROM user_table WHERE id = $1".to_string();
-    sqlx::query(&sql).bind(id).execute(&mut conn).await.unwrap();
+    let sql = "DELETE FROM user_table WHERE uuid = $1".to_string();
+    sqlx::query(&sql)
+        .bind(uuid)
+        .execute(&mut conn)
+        .await
+        .unwrap();
 
     Ok("Sucess".to_string())
 }
@@ -169,7 +174,7 @@ async fn delete_user(
 #[tokio::main]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "demo-axum=debug")
+        std::env::set_var("RUST_LOG", "app=debug")
     }
     tracing_subscriber::fmt::init();
 
@@ -182,14 +187,14 @@ async fn main() {
         .expect("can connect to database");
 
     let update_routes = Router::new()
-        .route("/name/:id", post(update_name))
-        .route("/age/:id", post(update_age));
+        .route("/name/:uuid", post(update_name))
+        .route("/age/:uuid", post(update_age));
 
     let api_routes = Router::new()
         .route("/users", get(get_users))
-        .route("/users/:id", get(get_user_by_id))
+        .route("/users/:uuid", get(get_user_by_uuid))
         .route("/create", post(create_user))
-        .route("/delete/:id", delete(delete_user))
+        .route("/delete/:uuid", delete(delete_user))
         .nest("/update", update_routes);
 
     let app = Router::new()

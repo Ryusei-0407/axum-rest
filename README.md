@@ -1,4 +1,4 @@
-# [Demo] Simple REST API Server powerd by Axum & sqlx & Postgres
+# [Demo] Simple REST API Server powerd by Axum & sqlx & CocroachDB
 
 ## Use Crate's
 
@@ -8,7 +8,7 @@
 
 ## Setup Environment
 
-**Build Postgres container & Create Database schema**
+**Start CocroachDB cluster & CocroachDB UI**
 
 ```sh
 git clone git@github.com:Ryusei-0407/axum-rest.git
@@ -21,12 +21,12 @@ docker-compose up -d
 
 sqlx db create
 
-# use uuid_random_v4() -> execute postgres/uuid.sql
-
 sqlx migrate run
 
 make
 ```
+
+visit the CocroachDB UI at http://localhost:8080
 
 **Clean Up**
 

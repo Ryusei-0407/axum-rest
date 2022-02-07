@@ -19,6 +19,8 @@ docker-compose up -d
 
 sqlx db create
 
+# use uuid_random_v4() -> execute postgres/uuid.sql
+
 sqlx migrate run
 
 make

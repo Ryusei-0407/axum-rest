@@ -17,4 +17,6 @@ FROM gcr.io/distroless/cc
 
 COPY --from=build /app/target/release/app /
 
+ARG DATABASE_URL
+
 CMD ["./app"]

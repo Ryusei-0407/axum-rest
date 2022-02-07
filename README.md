@@ -2,9 +2,9 @@
 
 ## Use Crate's
 
-- **Tokio (1.15.0)**
-- **Axum (0.4.5)**
-- **sqlx (0.5.10)**
+- **Tokio**
+- **Axum**
+- **sqlx**
 
 ## Setup Environment
 

@@ -1,4 +1,4 @@
-FROM rust:1.59.0-bullseye as build
+FROM rust:1.60.0-bullseye as build
 
 RUN apt update &&\
     apt install -y build-essential git clang cmake libstdc++-10-dev libssl-dev libxxhash-dev zlib1g-dev pkg-config &&\

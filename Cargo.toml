@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1.17.0", features = ["full"] }
 axum = "0.4.8"
-tracing = "0.1.33"
+tracing = "0.1.34"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 sqlx = { version = "0.5.12", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
 anyhow = "1.0.56"

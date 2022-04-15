@@ -1,4 +1,4 @@
-# [Demo] Simple REST API Server powerd by Axum & sqlx & CockroachDB
+# REST API Server powerd by Axum & sqlx & CockroachDB
 
 ## Use Crate's
 
